@@ -1,0 +1,9 @@
+#!/bin/bash
+#author: nzj
+#--runThreadN 线程数
+#--genomeDir 索引的文件夹
+#--readFilesCommand gunzip -c gz文件需要添加此命令
+#--readFilesIn 输入文件的位置，对于双末端测序文件，用空格分隔开就行了
+#--outSAMtype 默认输出的是sam文件，我们这里的BAM SortedByCoordinate是让他输出为ban文件，并排序
+#--outFileNamePrefix 表示的是输出文件的位置和前缀
+for i in {1..3};do STAR --runThreadN 10 --genomeDir /home/data/vip7t53/nizijia/index/star_index --readFilesCommand gunzip -c --readFilesIn /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_1.fq.gz /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_2.fq.gz --outSAMtype BAM SortedByCoordinate --outFileNamePrefix /home/data/vip7t53/nizijia/largedata/star_align/NIL-L-${i}/NIL-L-${i}; done

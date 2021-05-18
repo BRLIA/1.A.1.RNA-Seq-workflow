@@ -1,0 +1,8 @@
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+list="B73-L-1 B73-L-2 B73-L-3 NIL-L-1 NIL-L-2 NIL-L-3"
+for i in $list;do featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf -o /home/data/vip7t53/nizijia/largedata/star_quant/${i}/read.count /home/data/vip7t53/nizijia/largedata/star_align/${i}/${i}Aligned.sortedByCoord.out.bam;done

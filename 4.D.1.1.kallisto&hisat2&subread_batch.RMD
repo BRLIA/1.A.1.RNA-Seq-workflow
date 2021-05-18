@@ -1,0 +1,334 @@
+---
+title: "R Notebook"
+output: NULL
+---
+
+#监控程序，cpu & memory use
+- bugs & errors
+```{r}
+#找到进程PID
+
+
+PID=$(ps aux| grep "featurecounts" | grep -v 'grep' | awk '{print $2;}')
+echo "$PID"
+
+#!/bin/bash
+PROCESS="hisat2"
+LOG="/home/data/vip7t53/nizijia/record/psaux.txt"
+
+sleep 10
+
+if [ -f "$LOG" ];then 
+    rm "$LOG"
+fi
+
+PID=$(ps | grep $PROCESS | grep -v 'grep' | awk '{print $1;}')
+
+while [ "$PID" != "" ]    
+do
+    cat /proc/$PID/status | grep RSS >> "$LOG"#过滤出VmRSS行
+    sleep 5
+    PID=$(ps | grep $PROCESS | grep -v 'grep' | awk '{print $1;}')
+done & for i in {1..3} ;do
+date;echo "B73-L-${i} start"; hisat2 -p 20  -x /home/data/vip7t53/nizijia/index/hisat2_index/hisat2_index -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/B73-L-${i}/B73-L-${i}.sam    -1 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz   -2 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz;
+date;echo "B73-L-${i} done"; done  
+
+
+
+
+
+
+
+
+
+
+
+
+
+PROCESS="hisat2"
+ps | grep hisat2 | grep -v 'grep' | awk '{print $1;}'
+
+
+#!/bin/bash
+softname="hisat2"
+psname=`ps aux|head -1|awk '{print $3,$4,$10}'`
+ps=`ps aux|grep $softname |grep -v grep|grep -v sh|awk '{print $3,$4,$10}'`
+
+echo $psname > /home/data/vip7t53/nizijia/record/psaux.txt
+
+while :;
+ do
+   echo -e "\t $ps `date +%F-%H:%M:%S`" >> /home/data/vip7t53/nizijia/record/psaux.txt
+   sed -i 's/^[[:space:]]//g' /home/data/vip7t53/nizijia/record/psaux.txt
+   sleep 20
+done & for i in {1..3} ;do
+date;echo "B73-L-${i} start"; hisat2 -p 20  -x /home/data/vip7t53/nizijia/index/hisat2_index/hisat2_index -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/B73-L-${i}/B73-L-${i}.sam    -1 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz   -2 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz;
+date;echo "B73-L-${i} done"; done  
+
+
+
+
+
+
+#####for kallisto####
+#####for hisat2####
+#####for subread####
+
+
+
+
+```
+
+#linux脚本
+```{bash}
+#####kallisto-align####
+####build index
+kallisto index -o /home/data/vip7t53/data/sequence/genome/Zea_mays.B73_RefGen_v4.dna.toplevel.fa /home/data/vip7t53/nizijia/index/b73-kallisto-index.idx
+
+
+###B73-L
+#B73.L.sh
+#!/bin/bash
+#author: nzj
+#threads:10
+#--pseudobam 输出比对到参考转录组的bam文件
+#--genomebam 输出比对到参考基因组的bam文件，必须加上
+    #--gtf 来自对应参考转录组的基因注释文件gtf，提供基因组坐标
+        #不可使用0.46.2版本，需退到0.46.1
+for i in {1..3}
+do
+    date;echo "B73-L-${i} start"; kallisto quant -i /home/data/vip7t53/nizijia/index/b73-kallisto-index.idx -o /home/data/vip7t53/nizijia/largedata/kallisto_aligned/B73-L-${i}   -t 10 --genomebam --gtf /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz   /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz
+    date;echo "B73-L-${i} done"
+done
+#submit using nohup
+nohup sh B73.L.sh > B73.L.nohup.out &
+#kill jobs
+kill #jobid
+
+###NIL-L
+#!/bin/bash
+#author:nizijia
+#threads:10
+#--pseudobam 输出比对到参考转录组的bam文件
+#--genomebam 输出比对到参考基因组的bam文件，必须加上
+    #--gtf 来自对应参考转录组的基因注释文件gtf，提供基因组坐标
+        #不可使用0.46.2版本，需退到0.46.1
+for i in {1..3} ;do
+date;echo "NIL-L-${i} start"; kallisto quant -i /home/data/vip7t53/nizijia/index/b73-kallisto-index.idx -o /home/data/vip7t53/nizijia/largedata/kallisto_quanted/NIL-L-${i}   -t 10 --genomebam --gtf /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_1.fq.gz   /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_2.fq.gz;
+date;echo "NIL-L-${i} done"; done
+
+
+
+#####kallisto-quant#####
+###set dir
+for i in {1..3};do mkdir -p NIL-L-$i;done
+for i in {1..3};do mkdir -p B73-L-$i;done
+
+#for i in {1..3};do mkdir -p NIL-L-$i;mkdir -p B73-L-$i;done
+
+###B73-L
+#!/bin/bash
+#author: nzj
+#threads:20
+for i in {1..3} ;do
+date;echo "B73-L-${i} start"; kallisto quant -i /home/data/vip7t53/nizijia/index/b73-kallisto-index.idx -o /home/data/vip7t53/nizijia/largedata/kallisto_direct_quanted/B73-L-${i}   -t 10 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz   /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz;
+date;echo "B73-L-${i} done"; done
+
+###NIL-L
+#!/bin/bash
+#author:nizijia
+#threads:20
+for i in {1..3} ;do
+date;echo "NIL-L-${i} start"; kallisto quant -i /home/data/vip7t53/nizijia/index/b73-kallisto-index.idx -o /home/data/vip7t53/nizijia/largedata/kallisto_direct_quanted/NIL-L-${i}   -t 10 /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_1.fq.gz   /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_2.fq.gz;
+date;echo "NIL-L-${i} done"; done
+
+
+
+#####hisat2脚本####
+###建立index
+
+##用gffread将gff格式转换为gtf，需要cufflink 软件，里面有一个程序gffread进行转换
+
+gffread Zea_mays.B73_RefGen_v4.50.gff3 -T -o Zea_mays.B73_RefGen_v4.50_from_gff3.gtf
+##把exon和splice_sites信息提取出来，使用HISAT提供的脚本
+
+hisat2_extract_exons.py  Zea_mays.B73_RefGen_v4.50_from_gff3.gtf > ./reference/Zea_mays.AGPv4.50.exon
+hisat2_extract_splice_sites.py Zea_mays.B73_RefGen_v4.50_from_gff3.gtf > ./reference/Zea_mays.AGPv4.50.ss
+
+hisat2-build -p 16 /home/data/vip7t53/data/sequence/genome/Zea_mays.B73_RefGen_v4.dna.toplevel.fa --ss ./reference/Zea_mays.AGPv4.50.ss --exon ./reference/Zea_mays.AGPv4.50.exon ./index/hisat2_index/hisat2_index
+
+###B73-L
+#!/bin/bash
+#author: nzj
+for i in {1..3} ;do
+date;echo "B73-L-${i} start"; hisat2 -p 10  -x /home/data/vip7t53/nizijia/index/hisat2_index/hisat2_index -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/B73-L-${i}/B73-L-${i}.sam    -1 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz   -2 /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz;
+date;echo "B73-L-${i} done"; done
+
+
+
+###NIL-L
+#!/bin/bash
+#author:nizijia
+for i in {1..3} ;do
+date;echo "NIL-L-${i} start"; hisat2 -p 10  -x /home/data/vip7t53/nizijia/index/hisat2_index/hisat2_index -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/NIL-L-${i}/NIL-L-${i}.sam    -1 /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_1.fq.gz   -2 /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_2.fq.gz;
+date;echo "NIL-L-${i} done"; done
+
+#####.sam to .bam####
+###B73-L
+#!/bin/bash
+#author:nizijia
+#-S input is SAM，不设置就输入bam文件
+#-b output BAM, 不设置就输出sam文件
+#-@ INT 线程数
+for i in {1..3} ;do
+samtools view -@ 10 -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/B73-L-${i}/B73-L-${i}.sam -b > /home/data/vip7t53/nizijia/largedata/hisat2_aligned_bam/B73-L-${i}/B73-L-${i}.bam;done
+
+###NIL-L
+#author:nizijia
+#-S input is SAM，不设置就输入bam文件
+#-b output BAM, 不设置就输出sam文件
+for i in {1..3} ;do
+samtools view -@ 10 -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/NIL-L-${i}/NIL-L-${i}.sam -b > /home/data/vip7t53/nizijia/largedata/hisat2_aligned_bam/NIL-L-${i}/NIL-L-${i}.bam;done
+
+#####subread脚本####
+###buildindex
+subread-buildindex 
+
+###B73-L
+#!/bin/bash
+#author: nzj
+for i in {1..3} ;do
+date;echo "B73-L-${i} start"; subread-align -t 0  -T 10 -i /home/data/vip7t53/nizijia/index/subread_index_b73v4/b73v4 -o /home/data/vip7t53/nizijia/largedata/subread_aligned/B73-L-${i}/B73-L-${i}.bam  -r /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz   -R /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz;
+date;echo "B73-L-${i} done"; done
+
+
+###NIL-L
+#!/bin/bash
+#author:nizijia
+for i in {1..3} ;do
+date;echo "NIL-L-${i} start"; subread-align -t 0  -T 10 -i /home/data/vip7t53/nizijia/index/subread_index_b73v4/b73v4 -o /home/data/vip7t53/nizijia/largedata/subread_aligned/NIL-L-${i}/NIL-L-${i}.bam  -r /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_1.fq.gz   -R /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_2.fq.gz;
+date;echo "NIL-L-${i} done"; done
+
+
+#####STAR####
+###build star index
+STAR --runThreadN 10 --runMode genomeGenerate --genomeDir /home/data/vip7t53/nizijia/index/star_index --genomeFastaFiles /home/data/vip7t53/data/sequence/genome/Zea_mays.B73_RefGen_v4.dna.toplevel.fa --sjdbGTFfile /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf
+
+#STAR --runThreadN 10 --genomeDir /home/data/vip7t53/nizijia/index/star_index --readFilesCommand gunzip -c --readFilesIn /home/data/vip7t53/data/bm.NIL/B73-L-1/B73-L-1_1.fq.gz /home/data/vip7t53/data/bm.NIL/B73-L-1/B73-L-1_2.fq.gz --outSAMtype BAM SortedByCoordinate --outFileNamePrefix /home/data/vip7t53/nizijia/largedata/star_align/B73-L-1/B73-L-1
+
+###B73-L
+#!/bin/bash
+#author: nzj
+#--runThreadN 线程数
+#--genomeDir 索引的文件夹
+#--readFilesCommand gunzip -c gz文件需要添加此命令
+#--readFilesIn 输入文件的位置，对于双末端测序文件，用空格分隔开就行了
+#--outSAMtype 默认输出的是sam文件，我们这里的BAM SortedByCoordinate是让他输出为ban文件，并排序
+#--outFileNamePrefix 表示的是输出文件的位置和前缀
+for i in {1..3} ;do STAR --runThreadN 10 \--genomeDir /home/data/vip7t53/nizijia/index/star_index --readFilesCommand gunzip -c --readFilesIn /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_1.fq.gz /home/data/vip7t53/data/bm.NIL/B73-L-${i}/B73-L-${i}_2.fq.gz --outSAMtype BAM SortedByCoordinate --outFileNamePrefix /home/data/vip7t53/nizijia/largedata/star_align/B73-L-${i}/B73-L-${i}; done
+
+
+###NIL-L
+#!/bin/bash
+#author:nizijia
+for i in {1..3} ;do
+date;echo "NIL-L-${i} start"; hisat2 -p 10  -x /home/data/vip7t53/nizijia/index/hisat2_index/hisat2_index -S /home/data/vip7t53/nizijia/largedata/hisat2_aligned/NIL-L-${i}/NIL-L-${i}.sam    -1 /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_1.fq.gz   -2 /home/data/vip7t53/data/bm.NIL/NIL-L-${i}/NIL-L-${i}_2.fq.gz;
+date;echo "NIL-L-${i} done"; done
+ --runMode genomeGenerate --runThreadN <# cpus> --genomeDir <genome output directory> --genomeFastaFiles <input Genome FASTA file>
+```
+
+
+#定量
+```{r}
+#####featurecounts from kallisto####
+###B73-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3} ;do date;echo "B73-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/kallisto_quanted/B73-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/kallisto_aligned/B73-L-${i}/B73-L-${i}.bam ;  date;echo "B73-L-${i} done";done
+
+###NIL-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3} ;do date;echo "NIL-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/kallisto_quanted/NIL-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/kallisto_aligned/NIL-L-${i}/NIL-L-${i}.bam;  date;echo "NIL-L-${i} done";done
+
+
+
+
+#####featurecounts from hisat2####
+###B73-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3} ;do date;echo "B73-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/hisat2_quanted/B73-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/hisat2_aligned_bam/B73-L-${i}/B73-L-${i}.bam ;  date;echo "B73-L-${i} done";done
+
+###NIL-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3} ;do date;echo "NIL-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/hisat2_quanted/NIL-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/hisat2_aligned_bam/NIL-L-${i}/NIL-L-${i}.bam;  date;echo "NIL-L-${i} done";done
+
+
+
+#####featurecounts from subread####
+###B73-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3}; do date;echo "B73-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/subread_quanted/B73-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/subread_aligned/B73-L-${i}/B73-L-${i}.bam ;  date;echo "B73-L-${i} done";done
+
+###NIL-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3}; do date;echo "NIL-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/subread_quanted/NIL-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/subread_aligned/NIL-L-${i}/NIL-L-${i}.bam ;  date;echo "NIL-L-${i} done";done
+
+
+#####featurecounts from STAR####
+###B73-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3}; do date;echo "B73-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/star_align/B73-L-${i}/B73-L-${i}Aligned.sortedByCoord.out.bam /home/data/vip7t53/nizijia/largedata/subread_aligned/B73-L-${i}/B73-L-${i}.bam ;  date;echo "B73-L-${i} done";done
+
+###NIL-L
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+for i in {1..3}; do date;echo "NIL-L-${i} start"; featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/subread_quanted/NIL-L-${i}/read.count /home/data/vip7t53/nizijia/largedata/subread_aligned/NIL-L-${i}/NIL-L-${i}.bam ;  date;echo "NIL-L-${i} done";
+
+
+#!/bin/bash
+#author: nzj
+#-T 线程数
+#-p	只能用在paired-end的情况中，会统计fragment而不统计read
+#-B	在-p选择的条件下，只有两端read都比对上的fragment才会被统计
+#-C	如果-C被设置，那融合的fragment（比对到不同染色体上的fragment）就不会被计数，这个只有在-p被设置的条件下使用
+list="B73-L-1 B73-L-2 B73-L-3 NIL-L-1 NIL-L-2 NIL-L-3 "
+for i in $list;do featureCounts -p -T 10 -a /home/data/vip7t53/data/sequence/annotation/Zea_mays.B73_RefGen_v4.50.gtf.gz -o /home/data/vip7t53/nizijia/largedata/star_quant/${i}/read.count /home/data/vip7t53/nizijia/largedata/star_align/${i}/${i}Aligned.sortedByCoord.out.bam;done
+```

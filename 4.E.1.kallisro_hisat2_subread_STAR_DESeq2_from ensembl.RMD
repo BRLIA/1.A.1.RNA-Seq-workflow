@@ -1,0 +1,741 @@
+---
+title: "R Notebook"
+output: NULL
+---
+```{r setup}
+# , include=TRUE, warning=FALSE, echo=TRUE, error=FALSE
+knitr::opts_knit$set(root.dir=normalizePath('../'))
+knitr::opts_chunk$set(warning=FALSE, message=FALSE, error=FALSE, echo=TRUE)
+```
+
+
+#kallisto
+```{r}
+library(DESeq2)
+library(data.table)
+library(readr)
+library(tximport)
+
+
+#####构造sample information matrix####
+    samples <- data.frame(
+        sample = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        run = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        condition=c(paste(rep("B73-L",3)),paste(rep("NIL-L",3))),
+        conditionfactor=c("A","A","A","B","B","B"),
+        stringsAsFactors=FALSE)
+samples
+
+######准备count matrix####
+    library(readr)
+   
+    B73_1 <- read.table("largedata/4.E.1.kallisto_quanted/B73-L-1/read.count", sep = "\t", header= TRUE)
+    B73_2 <- read.table("largedata/4.E.1.kallisto_quanted/B73-L-2/read.count", sep = "\t", header= TRUE)
+    B73_3 <- read.table("largedata/4.E.1.kallisto_quanted/B73-L-3/read.count", sep = "\t", header= TRUE)
+    NIL_1 <- read.table("largedata/4.E.1.kallisto_quanted/NIL-L-1/read.count", sep = "\t", header= TRUE)
+    NIL_2 <- read.table("largedata/4.E.1.kallisto_quanted/NIL-L-2/read.count", sep = "\t", header= TRUE)
+    NIL_3 <- read.table("largedata/4.E.1.kallisto_quanted/NIL-L-3/read.count", sep = "\t", header= TRUE)
+    
+    colnames(B73_1)[7] <- "cl1"
+    colnames(B73_2)[7] <- "cl2"
+    colnames(B73_3)[7] <- "cl3"
+    colnames(NIL_1)[7] <- "cn1"
+    colnames(NIL_2)[7] <- "cn2"
+    colnames(NIL_3)[7] <- "cn3"
+ 
+    df1 <- subset(B73_1, select = c(Geneid,cl1))
+    df2 <- subset(B73_2, select = c(Geneid,cl2))
+    df3 <- subset(B73_3, select = c(Geneid,cl3))
+    df4 <- subset(NIL_1, select = c(Geneid,cn1))
+    df5 <- subset(NIL_2, select = c(Geneid,cn2))
+    df6 <- subset(NIL_3, select = c(Geneid,cn3))
+    
+    
+    dfa <- merge(merge(df1,df2, by="Geneid"),df3,by="Geneid")
+    dfb <- merge(merge(df4,df5, by="Geneid"),df6,by="Geneid")
+    df <- merge(dfa,dfb,by = "Geneid")
+    
+##使countmatrix的列名，与sample information matrix行名一致
+    colnames(df) <- c("geneid",paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    rownames(df) <- df$geneid
+    df <- subset(df,select = -c(geneid))
+    
+    rownames(samples) <- c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    
+    all(rownames(samples) %in% colnames(df))   #check 
+
+#####构造DEseqdataset####
+    library("DESeq2")
+    dds <- DESeqDataSetFromMatrix(countData = df,
+                              colData = samples,
+                              design = ~ condition)
+dds#46430
+
+
+#####DGE analysis####
+###pre-filtering
+    keep <- rowSums((counts(dds))) >=3    #只要counts>3的行,29074
+    dds <- dds[keep,]
+###DESeq
+    dds <- DESeq(dds)#29074
+
+###提取result
+    res <- results(dds)
+    res05 <- subset(res,padj<0.05)#250
+    res05_FC <- subset(res05,!(res05$log2FoldChange <= 0.1 & res05$log2FoldChange >= -0.1))#250
+    #收缩
+    #查看名字，resultsNames(dds)
+    reslfc <- lfcShrink(dds, coef="condition_NIL.L_vs_B73.L", type="apeglm")
+    reslfc05 <- subset(reslfc,padj<0.05)#250
+    reslfc05_FC <- subset(reslfc05,!(reslfc05$log2FoldChange <= 0.1 & reslfc05$log2FoldChange >= -0.1))#235    
+
+###save
+    #res
+    write.csv(res,"cache/e_kallisto_res.csv",row.names = TRUE)#29074
+    write.csv(reslfc,"cache/e_kallisto_reslfc.csv",row.names = TRUE)#29074
+    write.csv(res05,"cache/e_kallisto_res05.csv",row.names = TRUE)#250
+    write.csv(reslfc05,"cache/e_kallisto_reslfc05.csv",row.names = TRUE)#250
+    
+    #counts 
+    #rawcount
+    rawcount <- counts(dds)
+    write.csv(rawcount,file="cache/e_kallisto_rawcount.csv",row.names = TRUE)
+    #nomalizedcount
+    normalizedcount <- counts(dds,normalized = TRUE)
+    write.csv(normalizedcount,file="cache/e_kallisto_normalizedcount.csv",row.names = TRUE)
+    # #rawcount_lfc
+    # rawcount <- counts(reslfc)
+    # write.csv(rawcount,file="cache/e_kallisto_rawcount_lfc.csv",row.names = TRUE)
+    # #nomalizedcount_lfc
+    # normalizedcount <- counts(reslfc,normalized = TRUE)
+    # write.csv(normalizedcount,file="cache/e_kallisto_normalizedcount_lfc.csv",row.names = TRUE)
+
+    
+    #save raw&normalized data
+    rawcount <- read.csv("cache/e_kallisto_rawcount.csv")
+    #add suffix
+    colnames(rawcount)[1] <- c("geneID")
+    colnames(rawcount)[-1] <- paste(colnames(rawcount)[-1],"raw",sep="_")
+    #normalized
+    normalizedcount <- read.csv("cache/e_kallisto_normalizedcount.csv")
+    #add suffix
+    colnames(normalizedcount)[1] <- c("geneID")
+    colnames(normalizedcount)[-1] <- paste(colnames(normalizedcount)[-1],"normalized",sep="_")
+    #merge
+    count <- merge(rawcount,normalizedcount,by="geneID")
+    #save
+    write.csv(count,file="cache/e_kallisto_raw&normalizedcount.csv",row.names = FALSE)
+    #row.names = TRUE  每行前面多一格
+    #row.names = FALSE
+
+###save raw&normalized&res05_FC data 
+    #
+    reslfc05 <- read.csv("cache/e_kallisto_reslfc05.csv")
+    colnames(reslfc05)[1] <- "geneID"
+    #
+    count <- read.csv("cache/e_kallisto_raw&normalizedcount.csv")
+    #merge
+    reslfc05_count <- merge(reslfc05,count,by="geneID")
+    write.csv(reslfc05_count,file="cache/e_kallisto_countall_lfc.csv",row.names = FALSE)
+
+
+#####visualization####  
+###MA-plot
+    p1 <- plotMA(res, ylim=c(-11,14)) 
+    p2 <- plotMA(res05, ylim=c(-11,14)) 
+    p3 <- plotMA(res05_FC, ylim=c(-11,14))
+    p4 <- plotMA(reslfc, ylim=c(-5,5)) 
+    p5 <- plotMA(reslfc05, ylim=c(-5,5)) 
+    p6 <- plotMA(reslfc05_FC, ylim=c(-5,5))
+    
+###Heatmap of the sample-to-sample distances
+#Extracting transformed values
+vsd <- vst(dds, blind=FALSE) 
+rld <- rlog(dds, blind=FALSE)
+head(assay(vsd),3)
+
+sampleDists <- dist(t(assay(vsd)))
+library("RColorBrewer")
+library(pheatmap)
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$sample) 
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255) 
+p <- pheatmap(sampleDistMatrix,
+          clustering_distance_rows=sampleDists,
+          clustering_distance_cols=sampleDists,
+          col=colors)
+
+```
+
+#hisat2
+```{r}
+library(DESeq2)
+library(data.table)
+library(readr)
+library(tximport)
+
+
+#####构造sample information matrix####
+    samples <- data.frame(
+        sample = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        run = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        condition=c(paste(rep("B73-L",3)),paste(rep("NIL-L",3))),
+        conditionfactor=c("A","A","A","B","B","B"),
+        stringsAsFactors=FALSE)
+samples
+
+######准备count matrix####
+    library(readr)
+   
+    B73_1 <- read.table("largedata/4.E.2.hisat2_quanted/B73-L-1/read.count", sep = "\t", header= TRUE)
+    B73_2 <- read.table("largedata/4.E.2.hisat2_quanted/B73-L-2/read.count", sep = "\t", header= TRUE)
+    B73_3 <- read.table("largedata/4.E.2.hisat2_quanted/B73-L-3/read.count", sep = "\t", header= TRUE)
+    NIL_1 <- read.table("largedata/4.E.2.hisat2_quanted/NIL-L-1/read.count", sep = "\t", header= TRUE)
+    NIL_2 <- read.table("largedata/4.E.2.hisat2_quanted/NIL-L-2/read.count", sep = "\t", header= TRUE)
+    NIL_3 <- read.table("largedata/4.E.2.hisat2_quanted/NIL-L-3/read.count", sep = "\t", header= TRUE)
+    
+    colnames(B73_1)[7] <- "cl1"
+    colnames(B73_2)[7] <- "cl2"
+    colnames(B73_3)[7] <- "cl3"
+    colnames(NIL_1)[7] <- "cn1"
+    colnames(NIL_2)[7] <- "cn2"
+    colnames(NIL_3)[7] <- "cn3"
+ 
+    df1 <- subset(B73_1, select = c(Geneid,cl1))
+    df2 <- subset(B73_2, select = c(Geneid,cl2))
+    df3 <- subset(B73_3, select = c(Geneid,cl3))
+    df4 <- subset(NIL_1, select = c(Geneid,cn1))
+    df5 <- subset(NIL_2, select = c(Geneid,cn2))
+    df6 <- subset(NIL_3, select = c(Geneid,cn3))
+    
+    
+    dfa <- merge(merge(df1,df2, by="Geneid"),df3,by="Geneid")
+    dfb <- merge(merge(df4,df5, by="Geneid"),df6,by="Geneid")
+    df <- merge(dfa,dfb,by = "Geneid")
+    
+##使countmatrix的列名，与sample information matrix行名一致
+    colnames(df) <- c("geneid",paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    rownames(df) <- df$geneid
+    df <- subset(df,select = -c(geneid))
+    
+    rownames(samples) <- c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    
+    all(rownames(samples) %in% colnames(df))   #check 
+
+#####构造DEseqdataset####
+    library("DESeq2")
+    dds <- DESeqDataSetFromMatrix(countData = df,
+                              colData = samples,
+                              design = ~ condition)
+dds#42002
+
+
+#####DGE analysis####
+###pre-filtering
+    keep <- rowSums((counts(dds))) >=3    
+    dds <- dds[keep,]                   #只要counts>3的行,28743
+###DESeq
+    dds <- DESeq(dds)#28743
+
+###提取result
+    res <- results(dds)
+    res05 <- subset(res,padj<0.05)#267
+    res05_FC <- subset(res05,!(res05$log2FoldChange <= 0.1 & res05$log2FoldChange >= -0.1))#267
+    #收缩
+    #查看名字，resultsNames(dds)
+    reslfc <- lfcShrink(dds, coef="condition_NIL.L_vs_B73.L", type="apeglm")
+    reslfc05 <- subset(reslfc,padj<0.05)#267
+    reslfc05_FC <- subset(reslfc05,!(reslfc05$log2FoldChange <= 0.1 & reslfc05$log2FoldChange >= -0.1))#244    
+
+###save
+    #res
+    write.csv(res,"cache/e_hisat2_res.csv",row.names = TRUE)#28743
+    write.csv(reslfc,"cache/e_hisat2_reslfc.csv",row.names = TRUE)#28743
+    write.csv(res05,"cache/e_hisat2_res05.csv",row.names = TRUE)#267
+    write.csv(reslfc05,"cache/e_hisat2_reslfc05.csv",row.names = TRUE)#267
+    
+    #counts 
+    rawcount <- counts(dds)
+    write.csv(rawcount,file="cache/e_hisat2_rawcount.csv",row.names = TRUE)
+    normalizedcount <- counts(dds,normalized = TRUE)
+    write.csv(normalizedcount,file="cache/e_hisat2_normalizedcount.csv",row.names = TRUE)
+
+    
+    #save raw&normalized data
+    rawcount <- read.csv("cache/e_hisat2_rawcount.csv")
+    #add suffix
+    colnames(rawcount)[1] <- c("geneID")
+    colnames(rawcount)[-1] <- paste(colnames(rawcount)[-1],"raw",sep="_")
+    #normalized
+    normalizedcount <- read.csv("cache/e_hisat2_normalizedcount.csv")
+    #add suffix
+    colnames(normalizedcount)[1] <- c("geneID")
+    colnames(normalizedcount)[-1] <- paste(colnames(normalizedcount)[-1],"normalized",sep="_")
+    #merge
+    count <- merge(rawcount,normalizedcount,by="geneID")
+    #save
+    write.csv(count,file="cache/e_hisat2_raw&normalizedcount.csv",row.names = FALSE)
+    #row.names = TRUE  每行前面多一格
+    #row.names = FALSE
+
+###save raw&normalized&res05_FC data 
+    #
+    reslfc05 <- read.csv("cache/e_hisat2_reslfc05.csv")
+    colnames(reslfc05)[1] <- "geneID"
+    #
+    count <- read.csv("cache/e_hisat2_raw&normalizedcount.csv")
+    #merge
+    reslfc05_count <- merge(reslfc05,count,by="geneID")
+    write.csv(reslfc05_count,file="cache/e_hisat2_countall_lfc.csv",row.names = FALSE)
+
+
+#####visualization####  
+###MA-plot
+    p1 <- plotMA(res, ylim=c(-11,14)) 
+    p2 <- plotMA(res05, ylim=c(-11,14)) 
+    p3 <- plotMA(res05_FC, ylim=c(-11,14))
+    p4 <- plotMA(reslfc, ylim=c(-5,5)) 
+    p5 <- plotMA(reslfc05, ylim=c(-5,5)) 
+    p6 <- plotMA(reslfc05_FC, ylim=c(-5,5))
+    
+###Heatmap of the sample-to-sample distances
+#Extracting transformed values
+vsd <- vst(dds, blind=FALSE) 
+rld <- rlog(dds, blind=FALSE)
+head(assay(vsd),3)
+
+sampleDists <- dist(t(assay(vsd)))
+library("RColorBrewer")
+library(pheatmap)
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$sample) 
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255) 
+p <- pheatmap(sampleDistMatrix,
+          clustering_distance_rows=sampleDists,
+          clustering_distance_cols=sampleDists,
+          col=colors)
+```
+
+#subread
+```{r}
+library(DESeq2)
+library(data.table)
+library(readr)
+library(tximport)
+
+#####构造sample information matrix####
+    samples <- data.frame(
+        sample = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        run = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        condition=c(paste(rep("B73-L",3)),paste(rep("NIL-L",3))),
+        conditionfactor=c("A","A","A","B","B","B"),
+        stringsAsFactors=FALSE)
+samples
+
+######准备count matrix####
+    library(readr)
+    setwd("D:\\ZijiaNi\\ZijiaNi\\RNAseqToolComp")
+    B73_1 <- read.table("largedata/4.E.3.subread_quanted/B73-L-1/read.count", sep = "\t", header= TRUE)
+    B73_2 <- read.table("largedata/4.E.3.subread_quanted/B73-L-2/read.count", sep = "\t", header= TRUE)
+    B73_3 <- read.table("largedata/4.E.3.subread_quanted/B73-L-3/read.count", sep = "\t", header= TRUE)
+    NIL_1 <- read.table("largedata/4.E.3.subread_quanted/NIL-L-1/read.count", sep = "\t", header= TRUE)
+    NIL_2 <- read.table("largedata/4.E.3.subread_quanted/NIL-L-2/read.count", sep = "\t", header= TRUE)
+    NIL_3 <- read.table("largedata/4.E.3.subread_quanted/NIL-L-3/read.count", sep = "\t", header= TRUE)
+
+    colnames(B73_1)[7] <- "cl1"
+    colnames(B73_2)[7] <- "cl2"
+    colnames(B73_3)[7] <- "cl3"
+    colnames(NIL_1)[7] <- "cn1"
+    colnames(NIL_2)[7] <- "cn2"
+    colnames(NIL_3)[7] <- "cn3"
+    
+    df1 <- subset(B73_1, select = c(Geneid,cl1))
+    df2 <- subset(B73_2, select = c(Geneid,cl2))
+    df3 <- subset(B73_3, select = c(Geneid,cl3))
+    df4 <- subset(NIL_1, select = c(Geneid,cn1))
+    df5 <- subset(NIL_2, select = c(Geneid,cn2))
+    df6 <- subset(NIL_3, select = c(Geneid,cn3))
+    
+    dfa <- merge(merge(df1,df2, by="Geneid"),df3,by="Geneid")
+    dfb <- merge(merge(df4,df5, by="Geneid"),df6,by="Geneid")
+    df <- merge(dfa,dfb,by = "Geneid")
+    
+##使countmatrix的列名，与sample information matrix行名一致
+    colnames(df) <- c("geneid",paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    rownames(df) <- df$geneid
+    df <- subset(df,select = -c(geneid))
+    
+    rownames(samples) <- c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    
+    all(rownames(samples) %in% colnames(df))   #check 
+
+#####构造DEseqdataset####
+    library("DESeq2")
+    dds <- DESeqDataSetFromMatrix(countData = df,
+                              colData = samples,
+                              design = ~ condition)
+dds#46430
+
+
+#####DGE analysis####
+###pre-filtering
+    keep <- rowSums((counts(dds))) >=3     #只要counts>3的行,30706
+    dds <- dds[keep,]
+###DESeq
+    dds <- DESeq(dds)#30706
+    
+###提取result
+    res <- results(dds)
+    res05 <- subset(res,padj<0.05)#276
+    res05_FC <- subset(res05,!(res05$log2FoldChange <= 0.1 & res05$log2FoldChange >= -0.1))#276
+    #收缩
+    #查看名字，resultsNames(dds)
+    reslfc <- lfcShrink(dds, coef="condition_NIL.L_vs_B73.L", type="apeglm")
+    reslfc05 <- subset(reslfc,padj<0.05)#276
+    reslfc05_FC <- subset(reslfc05,!(reslfc05$log2FoldChange <= 0.1 & reslfc05$log2FoldChange >= -0.1))#254
+    
+
+#####保存数据####
+###save
+    #res
+    write.csv(res,"cache/e_subread_res.csv",row.names = TRUE)#30706
+    write.csv(reslfc,"cache/e_subread_reslfc.csv",row.names = TRUE)#30706
+    write.csv(res05,"cache/e_subread_res05.csv",row.names = TRUE)#276
+    write.csv(reslfc05,"cache/e_subread_reslfc05.csv",row.names = TRUE)#276
+    
+    #counts 
+    rawcount <- counts(dds)
+    write.csv(rawcount,file="cache/e_subread_rawcount.csv",row.names = TRUE)
+    normalizedcount <- counts(dds,normalized = TRUE)
+    write.csv(normalizedcount,file="cache/e_subread_normalizedcount.csv",row.names = TRUE)
+
+    
+    #save raw&normalized data
+    rawcount <- read.csv("cache/e_subread_rawcount.csv")
+    #add suffix
+    colnames(rawcount)[1] <- c("geneID")
+    colnames(rawcount)[-1] <- paste(colnames(rawcount)[-1],"raw",sep="_")
+    #normalized
+    normalizedcount <- read.csv("cache/e_subread_normalizedcount.csv")
+    #add suffix
+    colnames(normalizedcount)[1] <- c("geneID")
+    colnames(normalizedcount)[-1] <- paste(colnames(normalizedcount)[-1],"normalized",sep="_")
+    #merge
+    count <- merge(rawcount,normalizedcount,by="geneID")
+    #save
+    write.csv(count,file="cache/e_subread_raw&normalizedcount.csv",row.names = FALSE)
+    #row.names = TRUE  每行前面多一格
+    #row.names = FALSE
+
+###save raw&normalized&res05_FC data 
+    #
+    reslfc05 <- read.csv("cache/e_subread_reslfc05.csv")
+    colnames(reslfc05)[1] <- "geneID"
+    #
+    count <- read.csv("cache/e_subread_raw&normalizedcount.csv")
+    #merge
+    reslfc05_count <- merge(reslfc05,count,by="geneID")
+    write.csv(reslfc05_count,file="cache/e_subread_countall_lfc.csv",row.names = FALSE)
+    
+#####visualization####    
+   
+```
+
+#STAR
+```{r}
+library(DESeq2)
+library(data.table)
+library(readr)
+library(tximport)
+
+
+#####构造sample information matrix####
+    samples <- data.frame(
+        sample = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        run = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        condition=c(paste(rep("B73-L",3)),paste(rep("NIL-L",3))),
+        conditionfactor=c("A","A","A","B","B","B"),
+        stringsAsFactors=FALSE)
+samples
+
+######准备count matrix####
+    library(readr)
+   
+    B73_1 <- read.table("largedata/4.E.5.star_quanted/B73-L-1/read.count", sep = "\t", header= TRUE)
+    B73_2 <- read.table("largedata/4.E.5.star_quanted/B73-L-2/read.count", sep = "\t", header= TRUE)
+    B73_3 <- read.table("largedata/4.E.5.star_quanted/B73-L-3/read.count", sep = "\t", header= TRUE)
+    NIL_1 <- read.table("largedata/4.E.5.star_quanted/NIL-L-1/read.count", sep = "\t", header= TRUE)
+    NIL_2 <- read.table("largedata/4.E.5.star_quanted/NIL-L-2/read.count", sep = "\t", header= TRUE)
+    NIL_3 <- read.table("largedata/4.E.5.star_quanted/NIL-L-3/read.count", sep = "\t", header= TRUE)
+    
+    colnames(B73_1)[7] <- "cl1"
+    colnames(B73_2)[7] <- "cl2"
+    colnames(B73_3)[7] <- "cl3"
+    colnames(NIL_1)[7] <- "cn1"
+    colnames(NIL_2)[7] <- "cn2"
+    colnames(NIL_3)[7] <- "cn3"
+ 
+    df1 <- subset(B73_1, select = c(Geneid,cl1))
+    df2 <- subset(B73_2, select = c(Geneid,cl2))
+    df3 <- subset(B73_3, select = c(Geneid,cl3))
+    df4 <- subset(NIL_1, select = c(Geneid,cn1))
+    df5 <- subset(NIL_2, select = c(Geneid,cn2))
+    df6 <- subset(NIL_3, select = c(Geneid,cn3))
+    
+    
+    dfa <- merge(merge(df1,df2, by="Geneid"),df3,by="Geneid")
+    dfb <- merge(merge(df4,df5, by="Geneid"),df6,by="Geneid")
+    df <- merge(dfa,dfb,by = "Geneid")
+    
+##使countmatrix的列名，与sample information matrix行名一致
+    colnames(df) <- c("geneid",paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    rownames(df) <- df$geneid
+    df <- subset(df,select = -c(geneid))
+    
+    rownames(samples) <- c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-"))
+    
+    all(rownames(samples) %in% colnames(df))   #check 
+
+#####构造DEseqdataset####
+    library("DESeq2")
+    dds <- DESeqDataSetFromMatrix(countData = df,
+                              colData = samples,
+                              design = ~ condition)
+dds
+
+
+#####DGE analysis####
+###pre-filtering
+    keep <- rowSums((counts(dds))) >=3    
+    dds <- dds[keep,]                   #只要counts>3的行,28135
+###DESeq
+    dds <- DESeq(dds)#28135
+
+###提取result
+    res <- results(dds)
+    res05 <- subset(res,padj<0.05)#264
+    res05_FC <- subset(res05,!(res05$log2FoldChange <= 0.1 & res05$log2FoldChange >= -0.1))#264
+    #收缩
+    #查看名字，resultsNames(dds)
+    reslfc <- lfcShrink(dds, coef="condition_NIL.L_vs_B73.L", type="apeglm")
+    reslfc05 <- subset(reslfc,padj<0.05)#267
+   
+
+###save
+    #res
+    write.csv(res,"cache/e_star_res.csv",row.names = TRUE)#28135
+    write.csv(reslfc,"cache/e_star_reslfc.csv",row.names = TRUE)#28135
+    write.csv(res05,"cache/e_star_res05.csv",row.names = TRUE)#264
+    write.csv(reslfc05,"cache/e_star_reslfc05.csv",row.names = TRUE)#264
+    
+    #counts 
+    rawcount <- counts(dds)
+    write.csv(rawcount,file="cache/e_star_rawcount.csv",row.names = TRUE)
+    normalizedcount <- counts(dds,normalized = TRUE)
+    write.csv(normalizedcount,file="cache/e_star_normalizedcount.csv",row.names = TRUE)
+
+    
+    #save raw&normalized data
+    rawcount <- read.csv("cache/e_star_rawcount.csv")
+    #add suffix
+    colnames(rawcount)[1] <- c("geneID")
+    colnames(rawcount)[-1] <- paste(colnames(rawcount)[-1],"raw",sep="_")
+    #normalized
+    normalizedcount <- read.csv("cache/e_star_normalizedcount.csv")
+    #add suffix
+    colnames(normalizedcount)[1] <- c("geneID")
+    colnames(normalizedcount)[-1] <- paste(colnames(normalizedcount)[-1],"normalized",sep="_")
+    #merge
+    count <- merge(rawcount,normalizedcount,by="geneID")
+    #save
+    write.csv(count,file="cache/e_star_raw&normalizedcount.csv",row.names = FALSE)
+    #row.names = TRUE  每行前面多一格
+    #row.names = FALSE
+
+###save raw&normalized&res05_FC data 
+    #
+    reslfc05 <- read.csv("cache/e_star_reslfc05.csv")
+    colnames(reslfc05)[1] <- "geneID"
+    #
+    count <- read.csv("cache/e_star_raw&normalizedcount.csv")
+    #merge
+    reslfc05_count <- merge(reslfc05,count,by="geneID")
+    write.csv(reslfc05_count,file="cache/e_star_countall_lfc.csv",row.names = FALSE)
+
+
+#####visualization####  
+###MA-plot
+    p1 <- plotMA(res, ylim=c(-11,14)) 
+    p2 <- plotMA(res05, ylim=c(-11,14)) 
+    p3 <- plotMA(res05_FC, ylim=c(-11,14))
+    p4 <- plotMA(reslfc, ylim=c(-5,5)) 
+    p5 <- plotMA(reslfc05, ylim=c(-5,5)) 
+    p6 <- plotMA(reslfc05_FC, ylim=c(-5,5))
+    
+###Heatmap of the sample-to-sample distances
+#Extracting transformed values
+vsd <- vst(dds, blind=FALSE) 
+rld <- rlog(dds, blind=FALSE)
+head(assay(vsd),3)
+
+sampleDists <- dist(t(assay(vsd)))
+library("RColorBrewer")
+library(pheatmap)
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$sample) 
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255) 
+p <- pheatmap(sampleDistMatrix,
+          clustering_distance_rows=sampleDists,
+          clustering_distance_cols=sampleDists,
+          col=colors)
+```
+
+
+#kallisto_direct_quant
+```{r}
+library(DESeq2)
+library(data.table)
+library(readr)
+library(tximport)
+
+
+#####构造sample information matrix####
+     samples <- data.frame(
+        sample = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        run = c(paste("B73","L",1:3,sep = "-"),paste("NIL","L",1:3,sep = "-")),
+        condition=c(paste(rep("B73-L",3)),paste(rep("NIL-L",3))),
+        conditionfactor=c("A","A","A","B","B","B"),
+        stringsAsFactors=FALSE)
+samples
+
+#sample = c(paste("B73","S",1:3,sep = "_"),paste("B73","L",1:3,sep = "_"))
+#####构造count matrix####
+###提取Salmon, Sailfish, kallisto的输出文件
+    files <- file.path("largedata",
+                       "4.E.4.kallisto_direct_quanted",samples$run,"abundance.tsv")
+    names(files) <- samples$run
+    #检查file.path()里的路径，是否和真实路径一样    
+    all(file.exists(files))
+###构造基因名和转录本名字相关的数据框
+    #keytypes()/columns()，查看注释项目
+    #keys(maize2, keytype="")，查看注释项目的键
+    #select(),挑选需要的注释数据
+
+    #library(AnnotationDbi)
+    #    maize2=AnnotationDbi::loadDb(file="D:\\ZijiaNi\\ZijiaNi\\RNAseqToolComp\\orgdb\\org.Zea_mays.eg     (5).sqlite")
+    #    k<-keys(maize2,keytype = "ENTREZID")
+    #    df<-AnnotationDbi::select(maize2, 
+    #                          keys=k, 
+    #                          columns=c("ENTREZID", "REFSEQ"), 
+    #                          keytype="ENTREZID")
+    
+    tx2gene <- read_csv("cache/tx2gene.csv")
+###把transcript level abundance和count estimates，变成gene-level count matrix
+    txi <- tximport(files,type ="kallisto",tx2gene = tx2gene) 
+names(txi)
+head(txi$counts)
+head(txi$abundance)
+head(txi$length)
+head(txi$countsFromAbundance)
+
+
+#####构建DeseqDataset####
+###以condition作为实验设计
+    ddstxi <- DESeqDataSetFromTximport(txi,
+                                   colData = samples,
+                                   design = ~ condition)#39618
+
+#####Differential expression analysis####
+###pre-filtering
+    dds <- ddstxi
+    keep <- rowSums((counts(dds))) >=3     #只要counts>3的行,28684
+    dds <- dds[keep,]
+###开始DESeq2
+    #文库大小估计,离散程度估计,统计检验....
+    dds <- DESeq(dds)#28684
+   
+###提取结果
+    res <- results(dds)
+    res05 <- subset(res,padj<0.05)#247
+    res05_FC <- subset(res05,!(res05$log2FoldChange <= 0.1 & res05$log2FoldChange >= -0.1))#247
+    #收缩
+    reslfc <- lfcShrink(dds, coef="condition_NIL.L_vs_B73.L", type="apeglm")#28684
+    reslfc05 <- subset(reslfc,padj<0.05)#247
+    reslfc05_FC <- subset(reslfc05,!(reslfc05$log2FoldChange <= 0.1 & reslfc05$log2FoldChange >= -0.1))#231
+   
+
+###save
+    #res
+    
+    write.csv(res05_FC,"cache/e_direct_kallisto_res05.csv",row.names = TRUE)#247
+    write.csv(res,"cache/e_direct_kallisto_res.csv",row.names = TRUE)#28684
+    write.csv(reslfc,"cache/e_direct_kallisto_reslfc.csv",row.names = TRUE)#28684
+    write.csv(reslfc05,"cache/e_direct_kallisto_reslfc05.csv",row.names = TRUE)#247
+    
+    #counts 
+    rawcount <- counts(dds)
+    write.csv(rawcount,file="cache/e_direct_kallisto_rawcount.csv",row.names = TRUE)
+    normalizedcount <- counts(dds,normalized = TRUE)
+    write.csv(normalizedcount,file="cache/e_direct_kallisto_normalizedcount.csv",row.names = TRUE)
+
+    
+    #save raw&normalized data
+    rawcount <- read.csv("cache/e_direct_kallisto_rawcount.csv")
+    #add suffix
+    colnames(rawcount)[1] <- c("geneID")
+    colnames(rawcount)[-1] <- paste(colnames(rawcount)[-1],"raw",sep="_")
+    #normalized
+    normalizedcount <- read.csv("cache/e_direct_kallisto_normalizedcount.csv")
+    #add suffix
+    colnames(normalizedcount)[1] <- c("geneID")
+    colnames(normalizedcount)[-1] <- paste(colnames(normalizedcount)[-1],"normalized",sep="_")
+    #merge
+    count <- merge(rawcount,normalizedcount,by="geneID")
+    #save
+    write.csv(count,file="cache/e_direct_kallisto_raw&normalizedcount.csv",row.names = FALSE)
+    #row.names = TRUE  每行前面多一格
+    #row.names = FALSE
+
+###save raw&normalized&res05_FC data 
+    #
+    reslfc05 <- read.csv("cache/e_direct_kallisto_reslfc05.csv")
+    colnames(reslfc05)[1] <- "geneID"
+    #
+    count <- read.csv("cache/e_direct_kallisto_raw&normalizedcount.csv")
+    #merge
+    reslfc05_count <- merge(reslfc05,count,by="geneID")
+    write.csv(reslfc05_count,file="cache/e_direct_kallisto_countall_lfc.csv",row.names = FALSE)
+
+
+#####visualization####  
+###MA-plot
+    p1 <- plotMA(res, ylim=c(-11,14)) 
+    p2 <- plotMA(res05, ylim=c(-11,14)) 
+    p3 <- plotMA(res05_FC, ylim=c(-11,14))
+    p4 <- plotMA(reslfc, ylim=c(-5,5)) 
+    p5 <- plotMA(reslfc05, ylim=c(-5,5)) 
+    p6 <- plotMA(reslfc05_FC, ylim=c(-5,5))
+    
+###Heatmap of the sample-to-sample distances
+#Extracting transformed values
+vsd <- vst(dds, blind=FALSE) 
+rld <- rlog(dds, blind=FALSE)
+head(assay(vsd),3)
+
+sampleDists <- dist(t(assay(vsd)))
+library("RColorBrewer")
+library(pheatmap)
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$sample) 
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255) 
+p <- pheatmap(sampleDistMatrix,
+          clustering_distance_rows=sampleDists,
+          clustering_distance_cols=sampleDists,
+          col=colors)
+
+```
+
